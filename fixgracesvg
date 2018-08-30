@@ -1,0 +1,113 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+
+my $fname = 'ffts_18_v19_nve_20180823.svg';
+
+open my $svgfile, '<', $fname or die "Couldn't open SVG input file $fname: $?\n";
+
+(my $fixedname = $fname) =~ s/.svg/.fixed.svg/;
+
+open my $fixedsvgfile, '>', $fixedname or die "Couldn't open output SVG file $fixedname: $?\n";
+
+
+my $pastxmltag = 0;
+my $pastsvgtag = 0;
+
+my @file = ();
+
+my $nstext = 'xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"';
+
+# fix the svg tag to add the namespace and version
+while (my $line = <$svgfile>) {
+
+    # check for xml tag in the file
+    if ($line =~ /<\W*xml/si)
+    {
+	# see if the line has the whole tag
+	if ($line =~ /<\W*xml.*>/is) {
+	} else {
+	    while ($line =~ /<\W*xml.*>/si) { # no: get the rest of the tag
+		$line = join '',($line,<$svgfile>);
+	    }
+	}
+	# now deal with xml tag
+
+	
+	$line =~ /(<\W*xml[^>]*>)(.+)?/i; # capture xml tag and rest of string
+	my $xmltag = $1;
+	push @file,$xmltag;
+	$pastxmltag = 1; # yes: mark the tag as being done
+	$line = $2; # trim xml tag from line
+	next if (! scalar $line);
+    }
+
+    # keep the close svg tag
+    if ($line =~ /<\/\W*svg/) {
+	push @file,$line;
+	next;
+    }
+
+    # check for the svg tag
+    if ($line =~ /<(\W*)svg/i && $1 !~ /\//)
+    {
+	# make sure there was already an xml tag, otherwise make it
+	if (!$pastxmltag) {
+	    # grace skips the xml file header
+	    push @file,'<?xml version="1.0" standalone="no"?>';
+	}
+	# see if the line has the whole tag
+	if ($line =~ /<\W*svg.*>/si) {
+	} else {
+	    while ($line =~ /<\W*svg.*>/si) { # no: get the rest of the tag
+		$line = join '',($line,<$svgfile>);
+	    }
+	}
+	
+	if ($line !~ /xmlns/si) {
+	    $line =~ /^(.*<\W*svg)(.*>.*)$/si;
+	    $line = "$1 $nstext $2";
+	}
+
+	# push svg tag alone
+	$line =~ /(<\W*svg[^>]*>)(.+)?/i; # capture svg tag and rest of string
+	my $svgtag = $1;
+	push @file,$svgtag;
+	$pastsvgtag = 1; # yes: mark the tag as being done
+	
+	# keep rest of line
+	$line = $2; # trim svg tag from line
+	next if (! scalar($line)); # go on if no more line
+    }
+
+    if ($line =~ /<\W*DOCTYPE/i) {
+	# make sure it's the whole tag
+	while ($line !~ /<\W*DOCTYPE.+>/si) {
+	    $line = $line.<$svgfile>;
+	}
+	# skip the doctype tag
+	$line =~ s/<\W*doctype.+>//si;
+	next;
+    }
+
+    if ($line !~ /<\W*(xml|svg)/si) {
+	if (index($line,'!--')) { # if it's a comment
+	    push @file, $line;
+	} else {
+	    # make sure first two tags are xml and svg
+	    if (!$pastxmltag) {
+		push @file, '<?xml version="1.0" standalonbe="no"?>';
+	    }
+	    if (!$pastsvgtag) {
+		push @file, "<svg $nstext >";
+	    }   
+	}
+    }
+}
+
+print {$fixedsvgfile} @file,"\n";
+close $fixedsvgfile;
+
+print "Fixed svg written to $fixedname.\n";
+
+
