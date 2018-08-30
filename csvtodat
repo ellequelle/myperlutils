@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+use warnings; use strict;
+
+# csvtodat
+# Takes a .csv file (or list of files), and writes to .dat file(s) that
+# has only numerical data
+# First, nan and inf are replaced with 0.0, then any line with text is 
+# removed
+
+my $KEEPTEXT = 0;
+
+# filenames are passed as command line args
+my @filenames = ();
+if ($#ARGV > -1) {
+    @filenames = @ARGV;
+}
+
+foreach my $fname (@filenames) {
+($fname = $fname) =~ s/^\s|\s$//g;
+
+# if a file is piped in, write the output to 'datafile.csv'
+my $csvfile;
+my @csvlines;
+if (-e $fname) { # test if file exists
+    open($csvfile, '<', $fname) || die "could not open file: $fname $!\n";
+    @csvlines = <$csvfile>;
+} else {
+    open($csvfile, '<-') || die "could not recognize input\n";
+    @csvlines = <$csvfile>;
+    $fname = 'datafile.csv';
+}
+close $csvfile;
+
+my $datfname;
+if ($fname =~ m/[.]csv$/) {
+    ($datfname = $fname) =~ s/csv$/dat/i;
+} else {
+    $datfname = "$fname.dat";
+}
+
+# open output data file
+open(my $datfile, '>', $datfname) || die "could not open .dat file: $datfname $!\n";
+
+foreach my $line (@csvlines) {
+    (my $newline = $line) =~ s/^\s|\s$//gi; # trim leading/trailing whitespace
+    ($newline = $line) =~ s/nan/0.0/gi; # replace nan with 0.0
+    ($newline = $newline) =~ s/inf/0.0/gi; # replace inf with 0.0
+    ($newline = $newline) =~ s/infinity/0.0/gi; # replace infinity with 0.0
+    ($newline = $newline) =~ s/(\d)d([+-]|\d)/$1e$2/gi; # replace scientific notation 1.0D+1 -> 1.0e+1
+
+    next if (!$KEEPTEXT && $newline =~ m/[a-df-z]/i); # skip line if there is still text
+    my @cols = split(/\s*+[,;]\s*+/,$newline);
+    my @newcols;
+    # use fixed-width formatting with 16-character columns separated by a space
+    # +000.00000000000
+    # +0.000000000e+00
+    # +000000000000000
+    foreach my $val (@cols) {
+	if ($val =~ m/e/i || $val =~ m/[.]/i) { # represented in scientific or float notation
+	    if (abs($val) < 99999 && abs($val) > 1e-3) { # rational < 99999 and > 0.001 -> floating point
+		push @newcols, sprintf("% 16.9f",$val); # print in float notation
+	    } else { # rational with large abs value -> sci notation
+		push @newcols, sprintf("% 16.9e",$val); # print in scientic notation
+	    }
+	} elsif ($val =~ m/\d+/i) { # integer
+	    push @newcols, sprintf("% 16d",$val); # print as an integer
+	} elsif ($KEEPTEXT) {
+	    push @newcols, $val;
+	}	
+    }
+    print {$datfile} join(" ",@newcols),"\n";
+    #print {$datfile} $newline; # print modified line to new .dat file
+    exit if ($. > 4);
+}
+
+close $datfile;
+
+print ">$datfname\n";
+
+}
