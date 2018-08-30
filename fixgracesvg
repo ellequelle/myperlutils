@@ -2,10 +2,19 @@
 use warnings;
 use strict;
 
+# FIXGRACESVG repairs the broken svg files written by xmgrace
+# Fixgracesvg accepts filenames as arguments, in which case the
+# output is written to new files called {NAME}.fixed.svg.
+# Alternatively, fixgracesvg accepts svg piped as standard
+# input. In this case, the repaired svg is written to the
+# standard out.
+
 # filenames are passed as command line args
 my @filenames = ();
 if ($#ARGV > -1) {
     @filenames = @ARGV;
+} else {
+    @filenames = ('-');
 }
 
 foreach my $fname (@filenames) {
@@ -14,17 +23,22 @@ foreach my $fname (@filenames) {
     # if a file is piped in, write the output to 'datafile.svg'
     my $fixedname;
     my $svgfile;
+    my $fixedsvgfile;
     my @svglines;
-    if (-e $fname) { # test if file exists
+    open $fixedsvgfile, '>-' or die;
+    if (-e $fname && $fname !~ /^-$/) { # test if file exists
 	open($svgfile, '<', $fname) || die "could not open file: $fname $!\n";
 	($fixedname = $fname) =~ s/.svg/.fixed.svg/;
-    } else {
+	# open output svg file
+	open $fixedsvgfile, '>', $fixedname or die "Couldn't open output SVG file $fixedname: $?\n";
+    } elsif ($fname =~ /^-$/) {
 	open($svgfile, '<-') || die "could not recognize input\n";
-	$fixedname = 'datafile.svg';
+	$fixedname = '-';
+	# open output svg file
+	open $fixedsvgfile, '>-' or die "Couldn't open output SVG file $fixedname: $?\n";
+    } else {
+	print $fname," failing\n";
     }
-    
-    # open output svg file
-    open my $fixedsvgfile, '>', $fixedname or die "Couldn't open output SVG file $fixedname: $?\n";
     
     my $pastxmltag = 0;
     my $pastsvgtag = 0;
@@ -123,6 +137,6 @@ foreach my $fname (@filenames) {
     print {$fixedsvgfile} @file,"\n";
     close $fixedsvgfile;
     
-    print ">$fixedname\n";
+    print ">$fixedname\n" unless ($fixedname =~ m/^-$/);
     
 }
